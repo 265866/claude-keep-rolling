@@ -29,7 +29,7 @@ plugins:
     - "https://raw.githubusercontent.com/265866/claude-keep-rolling/main/registry.json"
 ```
 
-To install by hand, download the zip for your platform from the [latest release](https://github.com/265866/claude-keep-rolling/releases/latest). Put `claude-keep-rolling.so` in your plugins directory, then enable it:
+To install by hand, download the zip for your platform from the [latest release](https://github.com/265866/claude-keep-rolling/releases/latest). Releases include macOS (`darwin_amd64`, `darwin_arm64`), Linux (`linux_amd64`, `linux_arm64`) and Windows (`windows_amd64`). Put the library from the zip (`claude-keep-rolling.dylib`, `.so` or `.dll`) in your plugins directory, then enable it:
 
 ```yaml
 plugins:
@@ -39,6 +39,8 @@ plugins:
     claude-keep-rolling:
       enabled: true
 ```
+
+On Intel Macs, CLIProxyAPI v8.0.8 crashes with `fatal error: unknown caller pc` when it loads any Go plugin, including its own example plugins, so this plugin does not run there yet. The `darwin_amd64` build is published for the plugin store and is smoke-tested on every release.
 
 ## Use
 
@@ -63,17 +65,25 @@ claude-keep-rolling:
 
 ## Build
 
-The plugin is a Go `c-shared` library. Build it on Debian bookworm so it links against the same glibc as the official CLIProxyAPI image:
+The plugin is a Go `c-shared` library, and the version is stamped into it at build time. `scripts/release.sh` writes one store zip per target, plus `checksums.txt`, to `dist/`.
+
+Build the Linux and Windows libraries on Debian bookworm, so the Linux ones link against the same glibc as the official CLIProxyAPI image:
 
 ```sh
 podman run --rm -v "$PWD":/src -w /src -e VERSION=0.1.0 docker.io/library/golang:1.26-bookworm ./scripts/release.sh
 ```
 
-This writes the store release assets to `dist/`: one zip per platform (`linux_amd64`, `linux_arm64`) and `checksums.txt`. The version is stamped into the library at build time.
+Build the macOS libraries on a Mac:
+
+```sh
+VERSION=0.1.0 TARGETS="darwin/arm64 darwin/amd64" ./scripts/release.sh
+```
+
+`scripts/smoke-test.sh` loads a built zip into a real CLIProxyAPI release and checks that the plugin registers. CI runs it on all five platforms before every release.
 
 ## Releases
 
-Releases are automatic. Every push to `main` runs the checks, and if there are release-worthy commits since the last tag, publishes a GitHub release with the zips and `checksums.txt`. CLIProxyAPI installs from the latest release.
+Releases are automatic. Every push to `main` runs the checks, builds and smoke-tests all five platforms, and if there are release-worthy commits since the last tag, publishes a GitHub release with the zips and `checksums.txt`. CLIProxyAPI installs from the latest release.
 
 The version comes from [Conventional Commits](https://www.conventionalcommits.org/) since the last tag (see `scripts/next-version.sh`):
 
