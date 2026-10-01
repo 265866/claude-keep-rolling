@@ -22,7 +22,7 @@ const (
 	// shutdownWait bounds how long shutdown waits for in-flight pings.
 	shutdownWait = time.Minute
 	// pingMaxTokens keeps the reply tiny; it is not user-configurable.
-	pingMaxTokens = 16
+	pingMaxTokens = 1
 )
 
 var keeper = newRoller()

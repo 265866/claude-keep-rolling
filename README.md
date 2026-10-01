@@ -10,7 +10,7 @@ A Claude window starts with the first message and resets five hours later. This 
 - Claude's reply includes the window's reset time (`anthropic-ratelimit-unified-5h-reset`). The next ping is scheduled one minute after that time.
 - If a ping fails, the plugin retries in 15 minutes.
 - Disabled accounts are skipped.
-- The request has no tools, so the model can only reply with text. Replies are capped at 16 tokens.
+- The request has no tools, so the model can only reply with text. Replies are capped at 1 token.
 - CLIProxyAPI keeps a disabled plugin loaded without telling it, so the plugin checks its `enabled` flag in `config.yaml` before each round. Turning it off stops pings within 30 seconds. If the config is not a readable file, pings continue until CLIProxyAPI restarts.
 - Ping history is kept in memory. After a restart, every selected account is pinged once to learn its reset time.
 
