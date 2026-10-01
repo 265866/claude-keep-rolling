@@ -63,8 +63,9 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-      # Latest 1.26.x, like the bookworm image and CLIProxyAPI's own releases. On
-      # darwin/amd64 the two runtimes read each other's g and m structs.
+      # Latest 1.26.x, like the bookworm image. On darwin/amd64 the plugin and
+      # CLIProxyAPI read each other's g and m structs, so the Go minor version must
+      # match CLIProxyAPI's (1.26 for v8).
       - uses: actions/setup-go@v7
         with:
           go-version: "1.26"

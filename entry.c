@@ -16,7 +16,7 @@ static __thread void* plugin_g;
 
 static inline void* load_g(void) {
 	void* g;
-	__asm__ volatile("movq %%gs:0x30, %0" : "=r"(g));
+	__asm__ volatile("movq %%gs:0x30, %0" : "=r"(g) : : "memory");
 	return g;
 }
 
@@ -53,6 +53,8 @@ static inline crossing enter_host(void) {
 
 static inline void leave_host(crossing c) {
 	host_g = load_g();
+	// In a nested plugin-to-host call this restores a stale plugin_g; the outer
+	// leave_plugin reads the slot again before anything uses it.
 	plugin_g = c.parked;
 	store_g(c.caller_g);
 }
@@ -66,10 +68,8 @@ static inline void leave_host(crossing c) { (void)c; }
 
 #ifdef _WIN32
 #define ENTRY_EXPORT __declspec(dllexport)
-#define ENTRY_INTERNAL
 #else
 #define ENTRY_EXPORT __attribute__((visibility("default")))
-#define ENTRY_INTERNAL __attribute__((visibility("hidden")))
 #endif
 
 static const cliproxy_host_api* stored_host;
