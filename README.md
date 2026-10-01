@@ -40,7 +40,7 @@ plugins:
       enabled: true
 ```
 
-On Intel Macs, CLIProxyAPI v8.0.8 crashes with `fatal error: unknown caller pc` when it loads any Go plugin, including its own example plugins, so this plugin does not run there yet. The `darwin_amd64` build is published for the plugin store and is smoke-tested on every release.
+On Intel Macs, Go plugins share one thread-local slot with CLIProxyAPI's own Go runtime. The plugin swaps that slot on every call between the two, so it loads and runs normally there. One limit remains: while the plugin is loaded, a memory fault inside CLIProxyAPI that it would normally recover from, such as a nil pointer bug, can stop the whole process instead.
 
 ## Use
 
