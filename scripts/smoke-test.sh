@@ -52,8 +52,10 @@ trap 'kill "$pid" 2>/dev/null || true' EXIT
 
 fail() {
 	echo "FAIL: $1" >&2
-	echo "--- CLIProxyAPI log ---" >&2
-	tail -n 60 "$work/cpa.log" >&2 || true
+	echo "--- CLIProxyAPI log (first crash lines) ---" >&2
+	grep -n -m 5 -E 'fatal|panic|runtime/cgo|SIG[A-Z]+' "$work/cpa.log" >&2 || true
+	echo "--- CLIProxyAPI log (tail) ---" >&2
+	tail -n 40 "$work/cpa.log" >&2 || true
 	exit 1
 }
 
