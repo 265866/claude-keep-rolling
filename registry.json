@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "plugins": [
+    {
+      "id": "claude-keep-rolling",
+      "name": "Claude Keep Rolling",
+      "description": "Keeps Claude five-hour usage windows rolling by pinging each selected Claude account right after its window resets.",
+      "author": "265866",
+      "repository": "https://github.com/265866/claude-keep-rolling",
+      "homepage": "https://github.com/265866/claude-keep-rolling",
+      "license": "MIT",
+      "tags": ["Claude", "Usage", "Scheduler"]
+    }
+  ]
+}

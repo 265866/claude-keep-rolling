@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude Keep Rolling</title>
+<style>
+:root{color-scheme:light dark;--bg:#fff;--fg:#1d1f24;--muted:#6b7280;--line:#e5e7eb;--panel:#f9fafb;--accent:#c96442;--accent-fg:#fff;--ok:#15803d;--err:#b91c1c}
+@media (prefers-color-scheme:dark){:root{--bg:#17181c;--fg:#e8e9ed;--muted:#9ca3af;--line:#2c2f36;--panel:#1e2026;--ok:#4ade80;--err:#f87171}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:920px;margin:0 auto;padding:24px 20px 48px}
+h1{font-size:20px;margin:0}
+h2{font-size:15px;margin:0}
+.sub{color:var(--muted);margin:4px 0 20px}
+.head{display:flex;align-items:baseline;gap:10px}
+.version{color:var(--muted);font-size:12px}
+section{border:1px solid var(--line);border-radius:10px;margin-bottom:16px;overflow:hidden}
+.bar{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.pill{border:1px solid var(--line);background:transparent;color:var(--fg);border-radius:999px;padding:2px 10px;font:inherit;font-size:12px;cursor:pointer}
+.pill[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--accent-fg)}
+.row{display:grid;grid-template-columns:auto minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.row.labels{color:var(--muted);font-size:12px;padding-top:8px;padding-bottom:8px}
+.name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 5px;margin-left:6px}
+.ok{color:var(--ok)}.err{color:var(--err)}.muted{color:var(--muted)}
+.cell small{display:block;color:var(--muted);font-size:12px}
+button.small{font:inherit;font-size:12px;padding:3px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+button.small:disabled{opacity:.5;cursor:default}
+input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+.fields{display:grid;gap:12px;padding:14px}
+label.field{display:grid;gap:4px}
+label.field span{font-size:12px;color:var(--muted)}
+input[type=text],input[type=password]{font:inherit;padding:7px 9px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);width:100%}
+.empty,.notice{padding:16px 14px;color:var(--muted)}
+.notice.err{color:var(--err)}
+.keybox{display:flex;gap:8px;padding:14px}
+.keybox input{flex:1}
+#saved{margin-left:auto;font-size:12px;color:var(--muted)}
+@media (max-width:720px){.row{grid-template-columns:auto 1fr auto}.row .cell.wide,.row.labels{display:none}}
+</style>
+</head>
+<body>
+<main>
+<div class="head"><h1>Claude Keep Rolling</h1><span class="version" id="version"></span></div>
+<p class="sub">Pings each selected Claude account right after its five-hour window resets, so a new window is always running.</p>
+
+<section id="key-section" hidden>
+<div class="bar"><h2>Management key</h2></div>
+<p class="notice">Enter the CLIProxyAPI management key. It is kept for this browser tab only.</p>
+<form class="keybox" id="key-form"><input type="password" id="key-input" autocomplete="off" placeholder="Management key"><button class="small" type="submit">Connect</button></form>
+</section>
+
+<div id="app" hidden>
+<section>
+<div class="bar"><h2>Accounts</h2><button class="pill" id="select-all" type="button" aria-pressed="false">Select all</button><span id="saved"></span></div>
+<div id="accounts"></div>
+</section>
+
+<section>
+<div class="bar"><h2>Settings</h2></div>
+<div class="fields">
+<label class="field"><span>Model</span><input type="text" id="model" list="models" spellcheck="false"><datalist id="models"></datalist></label>
+<label class="field"><span>Prompt</span><input type="text" id="prompt"></label>
+</div>
+</section>
+</div>
+<p class="notice err" id="error" hidden></p>
+</main>
+<script>
+(function(){
+"use strict";
+var PLUGIN="claude-keep-rolling";
+var DEFAULTS={model:"claude-haiku-4-5-20251001",prompt:"hi",select_all:true,accounts:[]};
+var KEY_STORE="claude-keep-rolling.key";
+var key="";
+var state=null;
+var settings=Object.assign({},DEFAULTS);
+var modelsLoaded=false;
+// A refresh applies the stored config only if no save started or finished while it ran.
+var saving=0;
+var saves=0;
+// CPA may sit behind a reverse-proxy prefix; API paths share this page's prefix.
+var BASE=location.pathname.replace(/\/v0\/resource\/plugins\/.*$/,"");
+
+function $(id){return document.getElementById(id);}
+function el(tag,cls,text){var n=document.createElement(tag);if(cls)n.className=cls;if(text!==undefined)n.textContent=text;return n;}
+
+// Reuses the key the Management Center remembers, if any. The Center XOR-obfuscates
+// localStorage with a key derived from the host and user agent.
+function centerKey(){
+  try{
+    var raw=localStorage.getItem("cli-proxy-auth");
+    if(!raw)return "";
+    var prefix="enc::v1::";
+    if(raw.indexOf(prefix)===0){
+      var data=atob(raw.slice(prefix.length));
+      var mask=new TextEncoder().encode("cli-proxy-api-webui::secure-storage|"+location.host+"|"+navigator.userAgent);
+      var bytes=new Uint8Array(data.length);
+      for(var i=0;i<data.length;i++)bytes[i]=data.charCodeAt(i)^mask[i%mask.length];
+      raw=new TextDecoder().decode(bytes);
+    }
+    var parsed=JSON.parse(raw);
+    var stored=parsed&&parsed.state?parsed.state:parsed;
+    return stored&&typeof stored.managementKey==="string"?stored.managementKey:"";
+  }catch(e){return "";}
+}
+
+function api(method,path,body){
+  var opts={method:method,headers:{"Authorization":"Bearer "+key,"Accept":"application/json"}};
+  if(body!==undefined){opts.headers["Content-Type"]="application/json";opts.body=JSON.stringify(body);}
+  return fetch(BASE+path,opts).then(function(res){
+    return res.json().catch(function(){return {};}).then(function(data){
+      if(res.status===401){askForKey("That management key was rejected.");throw new Error("unauthorized");}
+      if(!res.ok)throw new Error(data.error||data.message||("HTTP "+res.status));
+      return data;
+    });
+  });
+}
+
+function askForKey(message){
+  key="";
+  sessionStorage.removeItem(KEY_STORE);
+  $("app").hidden=true;
+  $("key-section").hidden=false;
+  showError(message||"");
+}
+
+function showError(message){
+  $("error").hidden=!message;
+  $("error").textContent=message||"";
+}
+
+function rel(iso,now){
+  if(!iso)return "";
+  var ms=Date.parse(iso)-now;
+  var mins=Math.round(Math.abs(ms)/60000);
+  if(mins<1)return ms>=0?"in under a minute":"just now";
+  var text=mins<60?mins+"m":Math.floor(mins/60)+"h "+(mins%60)+"m";
+  return ms>=0?"in "+text:text+" ago";
+}
+
+function abs(iso){return iso?new Date(iso).toLocaleString():"";}
+
+function load(){
+  var started=saves;
+  return Promise.all([
+    api("GET","/v0/management/"+PLUGIN+"/state"),
+    api("GET","/v0/management/plugins/"+PLUGIN+"/config")
+  ]).then(function(results){
+    state=results[0];
+    var config=results[1]||{};
+    if(!saving&&started===saves)settings={
+      model:(config.model||"").trim()||DEFAULTS.model,
+      prompt:(config.prompt||"").trim()?config.prompt:DEFAULTS.prompt,
+      select_all:typeof config.select_all==="boolean"?config.select_all:DEFAULTS.select_all,
+      accounts:Array.isArray(config.accounts)?config.accounts:[]
+    };
+    $("key-section").hidden=true;
+    $("app").hidden=false;
+    showError(state.list_error?"Could not list accounts: "+state.list_error:
+      state.config_error?"The plugin config is invalid, so the previous settings are still in use: "+state.config_error:"");
+    render();
+    loadModels();
+  }).catch(function(e){if(e.message!=="unauthorized")showError(e.message);});
+}
+
+function selected(id){return settings.select_all||settings.accounts.indexOf(id)>=0;}
+
+function render(){
+  var now=Date.parse(state.now)||Date.now();
+  $("version").textContent="v"+state.version;
+  var pill=$("select-all");
+  pill.setAttribute("aria-pressed",settings.select_all?"true":"false");
+  pill.title=settings.select_all?"Every account is selected, including ones added later. Click to clear.":"Select every account, including ones added later.";
+  if(document.activeElement!==$("model"))$("model").value=settings.model;
+  if(document.activeElement!==$("prompt"))$("prompt").value=settings.prompt;
+
+  var list=$("accounts");
+  list.replaceChildren();
+  if(!state.accounts.length){
+    list.appendChild(el("p","empty","No Claude accounts in CLIProxyAPI yet. Log one in from the Management Center and it will show up here."));
+    return;
+  }
+  var labels=el("div","row labels");
+  ["","Account","Last ping","Window resets","Next ping",""].forEach(function(t,i){labels.appendChild(el("span",i>1&&i<5?"cell wide":"cell",t));});
+  list.appendChild(labels);
+  state.accounts.forEach(function(acc){
+    var row=el("div","row");
+    var box=el("input");box.type="checkbox";box.checked=selected(acc.id);box.disabled=acc.disabled;
+    box.setAttribute("aria-label","Keep "+acc.name+" rolling");
+    box.addEventListener("change",function(){toggle(acc.id,box.checked);});
+    row.appendChild(box);
+
+    var name=el("div","name",acc.name);
+    if(acc.disabled)name.appendChild(el("span","tag","Disabled"));
+    row.appendChild(name);
+
+    var last=el("div","cell wide");
+    if(acc.pinging){last.textContent="Pinging...";}
+    else if(acc.last_ping_at){
+      last.appendChild(el("span",acc.last_ok?"ok":"err",(acc.last_ok?"OK ":"Failed ")+rel(acc.last_ping_at,now)));
+      if(acc.last_error){var why=el("small","",acc.last_error);last.title=acc.last_error;last.appendChild(why);}
+    }else last.appendChild(el("span","muted","Never"));
+    row.appendChild(last);
+
+    var reset=el("div","cell wide");
+    if(acc.reset_at){reset.textContent=rel(acc.reset_at,now);reset.title=abs(acc.reset_at);}else reset.appendChild(el("span","muted","Unknown"));
+    row.appendChild(reset);
+
+    var next=el("div","cell wide");
+    if(acc.disabled||!selected(acc.id))next.appendChild(el("span","muted","Not rolling"));
+    else if(acc.next_ping_at){next.textContent=rel(acc.next_ping_at,now);next.title=abs(acc.next_ping_at);}
+    else next.appendChild(el("span","muted","Soon"));
+    row.appendChild(next);
+
+    var btn=el("button","small","Ping now");btn.type="button";btn.disabled=acc.disabled||acc.pinging;
+    btn.addEventListener("click",function(){pingNow(acc.id,btn);});
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+}
+
+function save(patch){
+  Object.assign(settings,patch);
+  render();
+  $("saved").textContent="Saving...";
+  saving++;
+  saves++;
+  return api("PATCH","/v0/management/plugins/"+PLUGIN+"/config",patch).finally(function(){saving--;saves++;}).then(function(){
+    $("saved").textContent="Saved";
+    setTimeout(function(){$("saved").textContent="";},2000);
+  }).catch(function(e){$("saved").textContent="";if(e.message!=="unauthorized")showError("Save failed: "+e.message);load();});
+}
+
+function toggle(id,on){
+  if(settings.select_all){
+    if(on)return;
+    save({select_all:false,accounts:state.accounts.map(function(a){return a.id;}).filter(function(x){return x!==id;})});
+    return;
+  }
+  var next=settings.accounts.filter(function(x){return x!==id;});
+  if(on)next.push(id);
+  save({select_all:false,accounts:next});
+}
+
+function pingNow(id,btn){
+  btn.disabled=true;btn.textContent="Pinging...";
+  api("POST","/v0/management/"+PLUGIN+"/ping",{id:id}).then(function(data){state=data;render();})
+    .catch(function(e){if(e.message!=="unauthorized"){showError("Ping failed: "+e.message);load();}});
+}
+
+function loadModels(){
+  var source=state.accounts.filter(function(a){return !a.disabled;})[0];
+  if(modelsLoaded||!source)return;
+  modelsLoaded=true;
+  api("GET","/v8/management/credentials/models?name="+encodeURIComponent(source.id)).then(function(data){
+    var models=data.models||[];
+    if(!models.length){modelsLoaded=false;return;}
+    var list=$("models");list.replaceChildren();
+    models.forEach(function(m){var o=el("option");o.value=m.id;if(m.display_name)o.label=m.display_name;list.appendChild(o);});
+  }).catch(function(){modelsLoaded=false;});
+}
+
+$("select-all").addEventListener("click",function(){
+  save(settings.select_all?{select_all:false,accounts:[]}:{select_all:true,accounts:[]});
+});
+$("model").addEventListener("change",function(){var v=this.value.trim()||DEFAULTS.model;this.value=v;if(v!==settings.model)save({model:v});});
+$("prompt").addEventListener("change",function(){var v=this.value.trim()?this.value:DEFAULTS.prompt;this.value=v;if(v!==settings.prompt)save({prompt:v});});
+$("key-form").addEventListener("submit",function(ev){
+  ev.preventDefault();
+  key=$("key-input").value.trim();
+  if(!key)return;
+  sessionStorage.setItem(KEY_STORE,key);
+  showError("");
+  load();
+});
+
+key=sessionStorage.getItem(KEY_STORE)||centerKey();
+if(key)load();else askForKey("");
+setInterval(function(){if(key&&!document.hidden)load();},15000);
+})();
+</script>
+</body>
+</html>
