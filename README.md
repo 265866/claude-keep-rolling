@@ -45,7 +45,7 @@ plugins:
 Open **Claude Keep Rolling** in the Management Center sidebar.
 
 - **Accounts**: check the accounts to keep rolling. **Select all** includes accounts you add later. Unchecking any account switches to only the accounts you have checked.
-- **Settings**: the model and prompt for each ping.
+- **Settings**: the model and prompt for each ping. The model dropdown lists the Claude models CLIProxyAPI offers for your accounts. The default is Claude Haiku 4.5.
 - **Ping now** sends a ping immediately.
 
 The page reuses the Management Center's saved management key. If you are not logged in with **Remember password**, the page asks for the key and keeps it for the current tab only.

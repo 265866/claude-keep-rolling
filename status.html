@@ -25,14 +25,14 @@ section{border:1px solid var(--line);border-radius:10px;margin-bottom:16px;overf
 .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tag{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:4px;padding:0 5px;margin-left:6px}
 .ok{color:var(--ok)}.err{color:var(--err)}.muted{color:var(--muted)}
-.cell small{display:block;color:var(--muted);font-size:12px}
+.cell small{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--muted);font-size:12px}
 button.small{font:inherit;font-size:12px;padding:3px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
 button.small:disabled{opacity:.5;cursor:default}
 input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
 .fields{display:grid;gap:12px;padding:14px}
 label.field{display:grid;gap:4px}
 label.field span{font-size:12px;color:var(--muted)}
-input[type=text],input[type=password]{font:inherit;padding:7px 9px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);width:100%}
+input[type=text],input[type=password],select{font:inherit;padding:7px 9px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);width:100%}
 .empty,.notice{padding:16px 14px;color:var(--muted)}
 .notice.err{color:var(--err)}
 .keybox{display:flex;gap:8px;padding:14px}
@@ -61,7 +61,7 @@ input[type=text],input[type=password]{font:inherit;padding:7px 9px;border-radius
 <section>
 <div class="bar"><h2>Settings</h2></div>
 <div class="fields">
-<label class="field"><span>Model</span><input type="text" id="model" list="models" spellcheck="false"><datalist id="models"></datalist></label>
+<label class="field"><span>Model</span><select id="model"></select></label>
 <label class="field"><span>Prompt</span><input type="text" id="prompt"></label>
 </div>
 </section>
@@ -77,7 +77,7 @@ var KEY_STORE="claude-keep-rolling.key";
 var key="";
 var state=null;
 var settings=Object.assign({},DEFAULTS);
-var modelsLoaded=false;
+var models=[];
 // A refresh applies the stored config only if no save started or finished while it ran.
 var saving=0;
 var saves=0;
@@ -174,7 +174,7 @@ function render(){
   var pill=$("select-all");
   pill.setAttribute("aria-pressed",settings.select_all?"true":"false");
   pill.title=settings.select_all?"Every account is selected, including ones added later. Click to clear.":"Select every account, including ones added later.";
-  if(document.activeElement!==$("model"))$("model").value=settings.model;
+  if(document.activeElement!==$("model"))renderModels();
   if(document.activeElement!==$("prompt"))$("prompt").value=settings.prompt;
 
   var list=$("accounts");
@@ -253,20 +253,71 @@ function pingNow(id,btn){
 
 function loadModels(){
   var source=state.accounts.filter(function(a){return !a.disabled;})[0];
-  if(modelsLoaded||!source)return;
-  modelsLoaded=true;
+  if(models.length||!source)return;
   api("GET","/v8/management/credentials/models?name="+encodeURIComponent(source.id)).then(function(data){
-    var models=data.models||[];
-    if(!models.length){modelsLoaded=false;return;}
-    var list=$("models");list.replaceChildren();
-    models.forEach(function(m){var o=el("option");o.value=m.id;if(m.display_name)o.label=m.display_name;list.appendChild(o);});
-  }).catch(function(){modelsLoaded=false;});
+    var seen={};
+    models=(data.models||[]).map(function(m){return m.id;}).filter(function(id){
+      if(id.indexOf("claude-")!==0||seen[id])return false;
+      seen[id]=true;
+      return true;
+    }).sort(compareModels);
+    renderModels();
+  }).catch(function(){});
+}
+
+var FAMILIES=["fable","mythos","opus","sonnet","haiku"];
+
+// Short name from the model ID, e.g. claude-haiku-4-5-20251001 -> Claude Haiku 4.5.
+// CPA's display names are inconsistent and missing for some models.
+function parseModel(id){
+  var parts=id.replace(/^claude-/,"").replace(/-\d{8}$/,"").split("-");
+  var family="",version=[],extra=[];
+  parts.forEach(function(p){
+    if(FAMILIES.indexOf(p)>=0)family=p;
+    else if(/^\d+$/.test(p))version.push(p);
+    else extra.push(p);
+  });
+  return {family:family,version:version.join("."),extra:extra};
+}
+
+function modelName(id){
+  var m=parseModel(id);
+  if(!m.family)return id;
+  var cap=function(s){return s.charAt(0).toUpperCase()+s.slice(1);};
+  return ["Claude",cap(m.family),m.version].concat(m.extra.map(cap)).filter(Boolean).join(" ");
+}
+
+// Families from most to least capable, newest version first.
+function compareModels(a,b){
+  var x=parseModel(a),y=parseModel(b);
+  var fx=FAMILIES.indexOf(x.family),fy=FAMILIES.indexOf(y.family);
+  if(fx!==fy)return (fx<0?99:fx)-(fy<0?99:fy);
+  var vx=x.version.split(".").map(Number),vy=y.version.split(".").map(Number);
+  for(var i=0;i<Math.max(vx.length,vy.length);i++){
+    var d=(vy[i]||0)-(vx[i]||0);
+    if(d)return d;
+  }
+  return x.extra.length-y.extra.length;
+}
+
+function renderModels(){
+  var select=$("model");
+  var ids=models.slice();
+  if(ids.indexOf(settings.model)<0)ids.unshift(settings.model);
+  select.replaceChildren();
+  ids.forEach(function(id){
+    var name=modelName(id);
+    if(models.length&&models.indexOf(id)<0)name+=" (not available)";
+    var o=el("option","",name);o.value=id;o.title=id;
+    select.appendChild(o);
+  });
+  select.value=settings.model;
 }
 
 $("select-all").addEventListener("click",function(){
   save(settings.select_all?{select_all:false,accounts:[]}:{select_all:true,accounts:[]});
 });
-$("model").addEventListener("change",function(){var v=this.value.trim()||DEFAULTS.model;this.value=v;if(v!==settings.model)save({model:v});});
+$("model").addEventListener("change",function(){if(this.value!==settings.model)save({model:this.value});});
 $("prompt").addEventListener("change",function(){var v=this.value.trim()?this.value:DEFAULTS.prompt;this.value=v;if(v!==settings.prompt)save({prompt:v});});
 $("key-form").addEventListener("submit",function(ev){
   ev.preventDefault();
