@@ -39,9 +39,6 @@ plugins:
     claude-keep-rolling:
       enabled: true
 ```
-
-On Intel Macs, CLIProxyAPI v8.0.8 crashes with `fatal error: unknown caller pc` when it loads any Go plugin, including its own example plugins, so this plugin does not run there yet. The `darwin_amd64` build is published for the plugin store and is smoke-tested on every release.
-
 ## Use
 
 Open **Claude Keep Rolling** in the Management Center sidebar.
