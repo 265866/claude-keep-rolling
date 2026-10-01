@@ -33,7 +33,7 @@ jobs:
         run: |
           git clone --depth 1 --branch v8.0.8 https://github.com/router-for-me/CLIProxyAPI.git /tmp/cpa
           cd /tmp/cpa/examples/plugin/host-model-callback/go
-          sed -i '' 's#CLIProxyAPI/v7#CLIProxyAPI/v8#g' go.mod
+          sed -i '' -e 's#CLIProxyAPI/v7#CLIProxyAPI/v8#g' -e 's#v7.0.0#v8.0.0#g' go.mod
           go mod tidy
           go build -buildmode=c-shared -o /tmp/host-model-callback.dylib .
       - name: Load official example plugin
