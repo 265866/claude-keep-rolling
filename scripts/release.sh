@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Builds the plugin store release assets into dist/.
+# Builds the plugin store release assets for VERSION into dist/.
 # Run inside golang:1.26-bookworm so the libraries link against the same glibc
 # as the official CLIProxyAPI image:
-#   podman run --rm -v "$PWD":/src -w /src docker.io/library/golang:1.26-bookworm ./scripts/release.sh
+#   podman run --rm -v "$PWD":/src -w /src -e VERSION=0.1.0 docker.io/library/golang:1.26-bookworm ./scripts/release.sh
 set -euo pipefail
 
 id=claude-keep-rolling
-version=$(sed -n 's/^\tpluginVersion = "\(.*\)"$/\1/p' plugin.go)
-if [[ -z "$version" ]]; then
-	echo "could not read pluginVersion from plugin.go" >&2
+version=${VERSION:-}
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+	echo "VERSION must be a dotted numeric version such as 0.1.0, got '$version'" >&2
 	exit 1
 fi
 
@@ -27,7 +27,7 @@ for arch in amd64 arm64; do
 	out="dist/build/linux_$arch"
 	mkdir -p "$out"
 	CGO_ENABLED=1 GOOS=linux GOARCH=$arch CC=$cc \
-		go build -buildmode=c-shared -buildvcs=false -trimpath -ldflags "-s -w" -o "$out/$id.so" .
+		go build -buildmode=c-shared -buildvcs=false -trimpath -ldflags "-s -w -X main.pluginVersion=$version" -o "$out/$id.so" .
 	rm -f "$out/$id.h"
 	(cd "$out" && zip -q -X "../../${id}_${version}_linux_${arch}.zip" "$id.so")
 done

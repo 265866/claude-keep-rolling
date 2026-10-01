@@ -66,12 +66,25 @@ claude-keep-rolling:
 The plugin is a Go `c-shared` library. Build it on Debian bookworm so it links against the same glibc as the official CLIProxyAPI image:
 
 ```sh
-podman run --rm -v "$PWD":/src -w /src docker.io/library/golang:1.26-bookworm ./scripts/release.sh
+podman run --rm -v "$PWD":/src -w /src -e VERSION=0.1.0 docker.io/library/golang:1.26-bookworm ./scripts/release.sh
 ```
 
-This writes the store release assets to `dist/`: one zip per platform (`linux_amd64`, `linux_arm64`) and `checksums.txt`.
+This writes the store release assets to `dist/`: one zip per platform (`linux_amd64`, `linux_arm64`) and `checksums.txt`. The version is stamped into the library at build time.
 
-To publish, create a GitHub release tagged `v<version>`, where `<version>` matches `pluginVersion` in `plugin.go`, and attach the zips and `checksums.txt`. CLIProxyAPI installs from the latest release.
+## Releases
+
+Releases are automatic. Every push to `main` runs the checks, and if there are release-worthy commits since the last tag, publishes a GitHub release with the zips and `checksums.txt`. CLIProxyAPI installs from the latest release.
+
+The version comes from [Conventional Commits](https://www.conventionalcommits.org/) since the last tag (see `scripts/next-version.sh`):
+
+| Commit | Release |
+| --- | --- |
+| `feat: ...` | Minor, for example 0.1.0 to 0.2.0 |
+| `fix: ...` or `perf: ...` | Patch, for example 0.1.0 to 0.1.1 |
+| `feat!: ...` or a `BREAKING CHANGE:` footer | Minor below 1.0.0, major after |
+| Anything else (`docs`, `ci`, `chore`, ...) | No release |
+
+Changes land through pull requests that are squash-merged, so the PR title becomes the commit on `main` and decides the release.
 
 Run the tests with:
 

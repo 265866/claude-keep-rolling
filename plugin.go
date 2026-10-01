@@ -12,10 +12,12 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
+// pluginVersion is set at build time with -ldflags "-X main.pluginVersion=<version>".
+var pluginVersion = "0.0.0-dev"
+
 const (
-	pluginID      = "claude-keep-rolling"
-	pluginVersion = "0.1.0"
-	repository    = "https://github.com/265866/claude-keep-rolling"
+	pluginID   = "claude-keep-rolling"
+	repository = "https://github.com/265866/claude-keep-rolling"
 
 	statePath  = "/v0/management/" + pluginID + "/state"
 	pingPath   = "/v0/management/" + pluginID + "/ping"
