@@ -76,3 +76,17 @@ echo "ok: status page served"
 code=$(curl -s -o /dev/null -w '%{http_code}' "$base/v0/management/claude-keep-rolling/state")
 [[ "$code" == 401 ]] || fail "state route answered $code without the management key"
 echo "ok: state route requires the management key"
+
+# Each state call crosses from CLIProxyAPI into the plugin and back. A runtime that
+# binds a new thread record per crossing grows by tens of KB per call.
+if rss=$(ps -o rss= -p "$pid" 2>/dev/null) && [[ -n "${rss// /}" ]]; then
+	calls=2000
+	before=${rss// /}
+	for _ in $(seq "$calls"); do
+		curl -sf -o /dev/null -H "Authorization: Bearer $key" "$base/v0/management/claude-keep-rolling/state" || fail "state call failed during leak check"
+	done
+	after=$(ps -o rss= -p "$pid" | tr -d ' ')
+	growth=$((after - before))
+	((growth < 40960)) || fail "CLIProxyAPI grew by ${growth} KB over $calls plugin calls"
+	echo "ok: CLIProxyAPI grew by ${growth} KB over $calls plugin calls"
+fi

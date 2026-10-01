@@ -3,78 +3,121 @@
 #include "_cgo_export.h"
 
 #if defined(__APPLE__) && defined(__x86_64__)
-// Every Go runtime on darwin/amd64 keeps the current goroutine in the fixed TLS
-// slot %gs:0x30, so the host (also Go) and this plugin share one slot. Entering
-// one runtime from a thread owned by the other would hand it a foreign goroutine
-// ("fatal error: unknown caller pc"). Clearing the slot for the duration of each
-// crossing makes the callee treat the thread as a plain C thread, which Go supports.
-static inline void* detach_goroutine(void) {
+// Every Go runtime on darwin/amd64 keeps the current g in the fixed TLS slot
+// %gs:0x30, so the host (also Go) and this plugin share one slot. Entering one
+// runtime with the other's g in the slot crashes it ("fatal error: unknown caller
+// pc"). Each crossing therefore parks the caller's g and puts back the g the
+// callee left on this thread last time: its bound g0 after a callback, or NULL
+// on first entry, which cgo handles by binding an extra M to the thread. Handing
+// the callee its own g0 again lets it reuse that M; clearing the slot every time
+// would bind and leak a new M per crossing.
+static __thread void* host_g;
+static __thread void* plugin_g;
+
+static inline void* load_g(void) {
 	void* g;
 	__asm__ volatile("movq %%gs:0x30, %0" : "=r"(g));
-	__asm__ volatile("movq %0, %%gs:0x30" : : "r"((void*)0) : "memory");
 	return g;
 }
 
-static inline void reattach_goroutine(void* g) {
+static inline void store_g(void* g) {
 	__asm__ volatile("movq %0, %%gs:0x30" : : "r"(g) : "memory");
 }
+
+typedef struct {
+	void* caller_g;
+	void* parked;
+} crossing;
+
+// enter_plugin runs on a host thread before calling into the plugin. A nested call
+// back to the host gets the host's own g0, as for an ordinary Go-to-C-to-Go callback.
+static inline crossing enter_plugin(void) {
+	crossing c = {load_g(), host_g};
+	host_g = c.caller_g;
+	store_g(plugin_g);
+	return c;
+}
+
+static inline void leave_plugin(crossing c) {
+	plugin_g = load_g();
+	host_g = c.parked;
+	store_g(c.caller_g);
+}
+
+static inline crossing enter_host(void) {
+	crossing c = {load_g(), plugin_g};
+	plugin_g = c.caller_g;
+	store_g(host_g);
+	return c;
+}
+
+static inline void leave_host(crossing c) {
+	host_g = load_g();
+	plugin_g = c.parked;
+	store_g(c.caller_g);
+}
 #else
-static inline void* detach_goroutine(void) { return NULL; }
-static inline void reattach_goroutine(void* g) { (void)g; }
+typedef int crossing;
+static inline crossing enter_plugin(void) { return 0; }
+static inline void leave_plugin(crossing c) { (void)c; }
+static inline crossing enter_host(void) { return 0; }
+static inline void leave_host(crossing c) { (void)c; }
 #endif
 
 #ifdef _WIN32
 #define ENTRY_EXPORT __declspec(dllexport)
+#define ENTRY_INTERNAL
 #else
 #define ENTRY_EXPORT __attribute__((visibility("default")))
+#define ENTRY_INTERNAL __attribute__((visibility("hidden")))
 #endif
 
 static const cliproxy_host_api* stored_host;
 
 ENTRY_EXPORT int cliproxy_plugin_init(const cliproxy_host_api* host, cliproxy_plugin_api* plugin) {
-	void* g = detach_goroutine();
+	crossing c = enter_plugin();
 	int rc = cliproxyPluginInit((cliproxy_host_api*)host, plugin);
-	reattach_goroutine(g);
+	leave_plugin(c);
 	return rc;
 }
 
-int entry_plugin_call(char* method, uint8_t* request, size_t request_len, cliproxy_buffer* response) {
-	void* g = detach_goroutine();
+ENTRY_INTERNAL int entry_plugin_call(char* method, uint8_t* request, size_t request_len, cliproxy_buffer* response) {
+	crossing c = enter_plugin();
 	int rc = cliproxyPluginCall(method, request, request_len, response);
-	reattach_goroutine(g);
+	leave_plugin(c);
 	return rc;
 }
 
-void entry_plugin_free(void* ptr, size_t len) {
+ENTRY_INTERNAL void entry_plugin_free(void* ptr, size_t len) {
 	(void)len;
 	free(ptr);
 }
 
-void entry_plugin_shutdown(void) {
-	void* g = detach_goroutine();
+ENTRY_INTERNAL void entry_plugin_shutdown(void) {
+	crossing c = enter_plugin();
 	cliproxyPluginShutdown();
-	reattach_goroutine(g);
+	leave_plugin(c);
 }
 
-void entry_store_host(const cliproxy_host_api* host) {
+ENTRY_INTERNAL void entry_store_host(const cliproxy_host_api* host) {
 	stored_host = host;
 }
 
-int entry_call_host(const char* method, const uint8_t* request, size_t request_len, cliproxy_buffer* response) {
+ENTRY_INTERNAL int entry_call_host(const char* method, const uint8_t* request, size_t request_len, cliproxy_buffer* response) {
 	if (stored_host == NULL || stored_host->call == NULL) {
 		return 1;
 	}
-	void* g = detach_goroutine();
+	crossing c = enter_host();
 	int rc = stored_host->call(stored_host->host_ctx, method, request, request_len, response);
-	reattach_goroutine(g);
+	leave_host(c);
 	return rc;
 }
 
-void entry_free_host_buffer(void* ptr, size_t len) {
+ENTRY_INTERNAL void entry_free_host_buffer(void* ptr, size_t len) {
 	if (stored_host == NULL || stored_host->free_buffer == NULL || ptr == NULL) {
 		return;
 	}
-	void* g = detach_goroutine();
+	crossing c = enter_host();
 	stored_host->free_buffer(ptr, len);
-	reattach_goroutine(g);
+	leave_host(c);
 }

@@ -39,6 +39,9 @@ plugins:
     claude-keep-rolling:
       enabled: true
 ```
+
+On Intel Macs, Go plugins share one thread-local slot with CLIProxyAPI's own Go runtime. The plugin swaps that slot on every call between the two, so it loads and runs normally there. One limit remains: while the plugin is loaded, a memory fault inside CLIProxyAPI that it would normally recover from, such as a nil pointer bug, can stop the whole process instead.
+
 ## Use
 
 Open **Claude Keep Rolling** in the Management Center sidebar.
