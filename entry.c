@@ -3,6 +3,8 @@
 #include "_cgo_export.h"
 
 #if defined(__APPLE__) && defined(__x86_64__)
+#include <signal.h>
+
 // Every Go runtime on darwin/amd64 keeps the current g in the fixed TLS slot
 // %gs:0x30, so the host (also Go) and this plugin share one slot. Entering one
 // runtime with the other's g in the slot crashes it ("fatal error: unknown caller
@@ -58,7 +60,25 @@ static inline void leave_host(crossing c) {
 	plugin_g = c.parked;
 	store_g(c.caller_g);
 }
+
+// While loading, this plugin's runtime takes over the fault, SIGPIPE and
+// preemption signals. Its handler reads the shared slot, so a fault in host code
+// would be handled as the plugin's own and become fatal instead of a recoverable
+// panic. Go installs one handler for every signal it handles and the plugin leaves
+// SIGCHLD alone, so SIGCHLD still holds the host's handler: copy it back. Faults
+// in plugin code then reach the host's handler instead.
+static void return_signals_to_host(void) {
+	struct sigaction host;
+	if (sigaction(SIGCHLD, NULL, &host) != 0 || !(host.sa_flags & SA_SIGINFO) || host.sa_sigaction == NULL) {
+		return;
+	}
+	const int taken[] = {SIGSEGV, SIGBUS, SIGFPE, SIGPIPE, SIGURG};
+	for (size_t i = 0; i < sizeof(taken) / sizeof(taken[0]); i++) {
+		sigaction(taken[i], &host, NULL);
+	}
+}
 #else
+static void return_signals_to_host(void) {}
 typedef int crossing;
 static inline crossing enter_plugin(void) { return 0; }
 static inline void leave_plugin(crossing c) { (void)c; }
@@ -75,6 +95,7 @@ static inline void leave_host(crossing c) { (void)c; }
 static const cliproxy_host_api* stored_host;
 
 ENTRY_EXPORT int cliproxy_plugin_init(const cliproxy_host_api* host, cliproxy_plugin_api* plugin) {
+	return_signals_to_host();
 	crossing c = enter_plugin();
 	int rc = cliproxyPluginInit((cliproxy_host_api*)host, plugin);
 	leave_plugin(c);
