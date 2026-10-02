@@ -16,7 +16,7 @@ A Claude usage window starts with the first message and resets five hours later.
 
 - Each ping goes through CLIProxyAPI's own Claude executor, pinned to one account.
 - Claude's reply reports when the window resets. The next ping is scheduled one minute after that.
-- A failed ping is retried after 15 minutes, or just after the account's rate limit ends if that is later.
+- A failed ping is retried after 15 minutes, or just after CLIProxyAPI's cooldown for the account ends if that is later.
 - A ping is one short message with no tools, and the reply is capped at 1 token, so it uses almost none of the window.
 - Disabled accounts and Claude API keys are skipped.
 - Ping history is kept in memory. After CLIProxyAPI restarts, every selected account is pinged once to learn its reset time.
@@ -56,8 +56,8 @@ plugins:
 Open **Claude Keep Rolling** in the Management Center sidebar.
 
 - **Accounts**: check the accounts to keep rolling. **Select all** includes accounts you add later. Unchecking any account switches to only the accounts you have checked.
-- **Settings**: the model and prompt for each ping. The model list shows the Claude models CLIProxyAPI offers for your accounts. The default is Claude Haiku 4.5.
-- **Ping now** sends a ping immediately.
+- **Settings**: the model and prompt for each ping. The model list shows the Claude models CLIProxyAPI offers. The default is Claude Haiku 4.5.
+- **Ping now** sends a ping immediately. If it fails, the next scheduled ping still runs on time.
 
 The page reuses the management key the Management Center saved if you logged in with **Remember password**. Otherwise it asks for the key and keeps it for the current tab only.
 

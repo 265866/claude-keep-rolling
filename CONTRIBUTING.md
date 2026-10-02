@@ -9,15 +9,15 @@
 | `internal/rolling` | Host-independent rules: settings, account selection and ping timing |
 | `main.go`, `entry.c`, `abi.h` | The C ABI between CLIProxyAPI and the plugin |
 | `status.html` | The plugin page, embedded in the library |
-| `test/faulthost` | A minimal host that checks CLIProxyAPI still recovers its own faults with the plugin loaded |
+| `test/faulthost` | A minimal Go host that loads the plugin the way CLIProxyAPI does and checks that it still recovers its own faults |
 
 ## Test
 
 ```sh
-go test ./internal/...
+go test ./...
 ```
 
-The root package and `test/faulthost` use cgo and need a C compiler. CI runs gofumpt, `go mod tidy`, vet, golangci-lint, `go test -race ./...` and govulncheck in `golang:1.26-bookworm`.
+The root package and `test/faulthost` use cgo and need a C compiler. Without one, `go test ./internal/...` runs the scheduling rules only. CI runs gofumpt, `go mod tidy`, vet, golangci-lint, `go test -race ./...` and govulncheck in `golang:1.26-bookworm`.
 
 ## Build
 
