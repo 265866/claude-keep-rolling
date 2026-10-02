@@ -2,8 +2,10 @@ package main
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/265866/claude-keep-rolling/internal/rolling"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
@@ -60,5 +62,35 @@ func TestClaimAllowsOnePingPerAccount(t *testing.T) {
 	r.release("a")
 	if !r.claim("a") {
 		t.Fatal("claim should succeed after release")
+	}
+}
+
+func TestTruncate(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		limit int
+		want  string
+	}{
+		{"short", "  rate limited  ", 20, "rate limited"},
+		{"exact", "abcde", 5, "abcde"},
+		{"ascii", "abcdef", 5, "abcde..."},
+		// "é" is two bytes, so a 5-byte cut lands inside the third one.
+		{"multibyte", "ééé", 5, "éé..."},
+		{"emoji", "ok 👍👍", 5, "ok ..."},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := truncate(tc.value, tc.limit)
+			if got != tc.want {
+				t.Fatalf("truncate(%q, %d) = %q, want %q", tc.value, tc.limit, got, tc.want)
+			}
+			if !utf8.ValidString(got) {
+				t.Fatalf("truncate(%q, %d) = %q is not valid UTF-8", tc.value, tc.limit, got)
+			}
+			if len(strings.TrimSuffix(got, "...")) > tc.limit {
+				t.Fatalf("truncate(%q, %d) = %q is over the limit", tc.value, tc.limit, got)
+			}
+		})
 	}
 }
