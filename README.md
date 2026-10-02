@@ -1,26 +1,33 @@
 # Claude Keep Rolling
 
+[![CI](https://github.com/265866/claude-keep-rolling/actions/workflows/ci.yml/badge.svg)](https://github.com/265866/claude-keep-rolling/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/265866/claude-keep-rolling)](https://github.com/265866/claude-keep-rolling/releases/latest)
+
 A [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI) plugin that keeps Claude five-hour usage windows rolling.
 
-A Claude window starts with the first message and resets five hours later. This plugin sends a tiny message through each selected Claude account one minute after its window resets, so a new window is always running.
+A Claude usage window starts with the first message and resets five hours later. This plugin sends a tiny message through each selected Claude account one minute after its window resets, so a new window is always running.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/status-dark.png">
+  <img alt="The Claude Keep Rolling page, listing Claude accounts with their last ping, window reset and next ping" src="docs/status-light.png">
+</picture>
 
 ## How it works
 
 - Each ping goes through CLIProxyAPI's own Claude executor, pinned to one account.
-- Claude's reply includes the window's reset time (`anthropic-ratelimit-unified-5h-reset`). The next ping is scheduled one minute after that time.
-- If a ping fails, the plugin retries in 15 minutes.
-- Disabled accounts are skipped.
-- The request has no tools, so the model can only reply with text. Replies are capped at 1 token.
-- CLIProxyAPI keeps a disabled plugin loaded without telling it, so the plugin checks its `enabled` flag in `config.yaml` before each round. Turning it off stops pings within 30 seconds. If the config is not a readable file, pings continue until CLIProxyAPI restarts.
-- Ping history is kept in memory. After a restart, every selected account is pinged once to learn its reset time.
+- Claude's reply reports when the window resets. The next ping is scheduled one minute after that.
+- A failed ping is retried after 15 minutes, or just after the account's rate limit ends if that is later.
+- A ping is one short message with no tools, and the reply is capped at 1 token, so it uses almost none of the window.
+- Disabled accounts and Claude API keys are skipped.
+- Ping history is kept in memory. After CLIProxyAPI restarts, every selected account is pinged once to learn its reset time.
 
 ## Install
 
-Requires CLIProxyAPI v8 with plugins enabled.
+Requires CLIProxyAPI v8 with plugins enabled. Releases cover macOS (Apple Silicon and Intel), Linux (x64 and Arm) and Windows (x64).
 
-Once the plugin is listed in the official plugin store, install it from **Plugin Store** in the Management Center.
+### From the Plugin Store
 
-Until then, add this repository's registry as a store source, then install it from **Plugin Store**:
+Add this repository's registry to the store sources in `config.yaml`:
 
 ```yaml
 plugins:
@@ -29,7 +36,11 @@ plugins:
     - "https://raw.githubusercontent.com/265866/claude-keep-rolling/main/registry.json"
 ```
 
-To install by hand, download the zip for your platform from the [latest release](https://github.com/265866/claude-keep-rolling/releases/latest). Releases include macOS (`darwin_amd64`, `darwin_arm64`), Linux (`linux_amd64`, `linux_arm64`) and Windows (`windows_amd64`). Put the library from the zip (`claude-keep-rolling.dylib`, `.so` or `.dll`) in your plugins directory, then enable it:
+Then open **Plugin Store** in the Management Center and install **Claude Keep Rolling**.
+
+### Manually
+
+Download the zip for your platform from the [latest release](https://github.com/265866/claude-keep-rolling/releases/latest) and check it against `checksums.txt`. Put the library from the zip (`claude-keep-rolling.dylib`, `.so` or `.dll`) in your plugins directory, then enable it:
 
 ```yaml
 plugins:
@@ -40,71 +51,40 @@ plugins:
       enabled: true
 ```
 
-On Intel Macs, Go plugins share one thread-local slot with CLIProxyAPI's own Go runtime, and a Go plugin's runtime also takes over some of CLIProxyAPI's signal handlers when it loads. This plugin swaps that slot on every call between the two and hands those signals back to CLIProxyAPI, so it runs normally there and CLIProxyAPI still recovers from its own faults. Two trade-offs remain on Intel Macs: a memory fault in this plugin's own code stops CLIProxyAPI, and another Go plugin loaded after this one takes those signal handlers back.
-
 ## Use
 
 Open **Claude Keep Rolling** in the Management Center sidebar.
 
 - **Accounts**: check the accounts to keep rolling. **Select all** includes accounts you add later. Unchecking any account switches to only the accounts you have checked.
-- **Settings**: the model and prompt for each ping. The model dropdown lists the Claude models CLIProxyAPI offers for your accounts. The default is Claude Haiku 4.5.
+- **Settings**: the model and prompt for each ping. The model list shows the Claude models CLIProxyAPI offers for your accounts. The default is Claude Haiku 4.5.
 - **Ping now** sends a ping immediately.
 
-The page reuses the Management Center's saved management key. If you are not logged in with **Remember password**, the page asks for the key and keeps it for the current tab only.
+The page reuses the management key the Management Center saved if you logged in with **Remember password**. Otherwise it asks for the key and keeps it for the current tab only.
 
-Settings are saved in `config.yaml`:
+Disabling the plugin stops pings within 30 seconds. If your CLIProxyAPI config is not stored in a file, pings continue until CLIProxyAPI restarts.
+
+## Configuration
+
+The page saves its settings under the plugin's entry in `config.yaml`:
 
 ```yaml
-claude-keep-rolling:
-  enabled: true
-  model: claude-haiku-4-5-20251001  # default
-  prompt: hi                         # default
-  select_all: true                   # default
-  accounts: []                       # account IDs, used when select_all is false
-```
-
-## Build
-
-The plugin is a Go `c-shared` library, and the version is stamped into it at build time. `scripts/release.sh` writes one store zip per target, plus `checksums.txt`, to `dist/`.
-
-Build the Linux and Windows libraries on Debian bookworm, so the Linux ones link against the same glibc as the official CLIProxyAPI image:
-
-```sh
-podman run --rm -v "$PWD":/src -w /src -e VERSION=0.1.0 docker.io/library/golang:1.26-bookworm ./scripts/release.sh
-```
-
-Build the macOS libraries on a Mac:
-
-```sh
-VERSION=0.1.0 TARGETS="darwin/arm64 darwin/amd64" ./scripts/release.sh
-```
-
-`scripts/smoke-test.sh` loads a built zip into a real CLIProxyAPI release and checks that the plugin registers. CI runs it on all five platforms before every release.
-
-## Releases
-
-Releases are automatic. Every push to `main` runs the checks, builds and smoke-tests all five platforms, and if there are release-worthy commits since the last tag, publishes a GitHub release with the zips and `checksums.txt`. CLIProxyAPI installs from the latest release.
-
-The version comes from [Conventional Commits](https://www.conventionalcommits.org/) since the last tag (see `scripts/next-version.sh`):
-
-| Commit | Release |
-| --- | --- |
-| `feat: ...` | Minor, for example 0.1.0 to 0.2.0 |
-| `fix: ...` or `perf: ...` | Patch, for example 0.1.0 to 0.1.1 |
-| `feat!: ...` or a `BREAKING CHANGE:` footer | Minor below 1.0.0, major after |
-| Anything else (`docs`, `ci`, `chore`, ...) | No release |
-
-Changes land through pull requests that are squash-merged, so the PR title becomes the commit on `main` and decides the release.
-
-Run the tests with:
-
-```sh
-go test ./internal/...
+plugins:
+  configs:
+    claude-keep-rolling:
+      enabled: true
+      model: claude-haiku-4-5-20251001  # default
+      prompt: hi                         # default
+      select_all: true                   # default
+      accounts: []                       # account IDs, used when select_all is false
 ```
 
 ## Account risk
 
-Anthropic restricts using Claude subscription logins through third-party tools. Using CLIProxyAPI with Claude accounts, and sending scheduled pings through them, may put those accounts at risk. Use at your own discretion.
+Anthropic restricts the use of Claude subscription logins through third-party tools. Using CLIProxyAPI with Claude accounts, and sending scheduled pings through them, may put those accounts at risk. Use it at your own discretion.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for building, testing and releasing.
 
 ## License
 
