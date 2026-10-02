@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Loads a plugin zip into a real CLIProxyAPI release and checks that the plugin
 # registers with VERSION, serves its page, and keeps its data behind the
-# management key. CPA_ASSET is the CLIProxyAPI release asset suffix for the runner.
-#   VERSION=0.1.0 CPA_ASSET=linux_amd64.tar.gz ./scripts/smoke-test.sh dist/claude-keep-rolling_0.1.0_linux_amd64.zip
+# management key. CPA_VERSION is the CLIProxyAPI release to test against, and
+# CPA_ASSET is its release asset suffix for the runner.
+#   VERSION=0.1.0 CPA_VERSION=8.0.10 CPA_ASSET=linux_amd64.tar.gz ./scripts/smoke-test.sh dist/claude-keep-rolling_0.1.0_linux_amd64.zip
 set -euo pipefail
 
 zip=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
-cpa_version=${CPA_VERSION:-8.0.8}
+cpa_version=${CPA_VERSION:?CPA_VERSION is required}
 asset="CLIProxyAPI_${cpa_version}_${CPA_ASSET:?CPA_ASSET is required}"
 port=18317
 key=smoke-test-key
