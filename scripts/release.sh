@@ -23,6 +23,11 @@ if [[ "$(uname -s)" == Linux ]] && ! { command -v aarch64-linux-gnu-gcc && comma
 	apt-get install -y -qq gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64 zip >/dev/null
 fi
 
+# go build stamps the commit into each library so a store reviewer can match it to
+# the release tag. In a container the checkout belongs to another user, and git
+# refuses it unless the directory is trusted. Trust it for this script only.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0="$PWD"
+
 rm -rf dist
 mkdir -p dist
 for target in $targets; do
@@ -42,7 +47,7 @@ for target in $targets; do
 	out="dist/build/${goos}_$goarch"
 	mkdir -p "$out"
 	CGO_ENABLED=1 GOOS=$goos GOARCH=$goarch CC=$cc \
-		go build -buildmode=c-shared -buildvcs=false -trimpath -ldflags "-s -w -X main.pluginVersion=$version" -o "$out/$id.$ext" .
+		go build -buildmode=c-shared -buildvcs=true -trimpath -ldflags "-s -w -X main.pluginVersion=$version" -o "$out/$id.$ext" .
 	rm -f "$out/$id.h"
 	(cd "$out" && zip -q -X "../../${id}_${version}_${goos}_${goarch}.zip" "$id.$ext")
 done
