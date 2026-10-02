@@ -66,7 +66,9 @@ static inline void leave_host(crossing c) {
 // would be handled as the plugin's own and become fatal instead of a recoverable
 // panic. Go installs one handler for every signal it handles and the plugin leaves
 // SIGCHLD alone, so SIGCHLD still holds the host's handler: copy it back. Faults
-// in plugin code then reach the host's handler instead.
+// in plugin code then reach the host's handler instead, and the plugin loses
+// async preemption. Its preemption bookkeeping then never settles, so the plugin
+// must not fork or exec (no os/exec).
 static void return_signals_to_host(void) {
 	struct sigaction host;
 	if (sigaction(SIGCHLD, NULL, &host) != 0 || !(host.sa_flags & SA_SIGINFO) || host.sa_sigaction == NULL) {

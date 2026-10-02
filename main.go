@@ -25,6 +25,8 @@ func cliproxyPluginInit(host *C.cliproxy_host_api, plugin *C.cliproxy_plugin_api
 		return 1
 	}
 	C.entry_store_host(host)
+	// Reloading the same library path reuses this loaded image after a shutdown.
+	hostClosed.Store(false)
 	plugin.abi_version = C.uint32_t(pluginabi.ABIVersion)
 	plugin.call = C.cliproxy_plugin_call_fn(C.entry_plugin_call)
 	plugin.free_buffer = C.cliproxy_plugin_free_fn(C.entry_plugin_free)
