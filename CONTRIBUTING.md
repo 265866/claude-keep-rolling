@@ -21,7 +21,7 @@ The root package and `test/faulthost` use cgo and need a C compiler. Without one
 
 ## Build
 
-The plugin is a Go `c-shared` library, and the version is stamped into it at build time. `scripts/release.sh` writes one store zip per target, plus `checksums.txt`, to `dist/`.
+The plugin is a Go `c-shared` library, and the version and git commit are stamped into it at build time. Build releases from a clean checkout: CI rejects a library that does not carry the built commit or was built from a modified tree. `scripts/release.sh` writes one store zip per target, plus `checksums.txt`, to `dist/`.
 
 Build the Linux and Windows libraries on Debian bookworm, so the Linux ones link against the same glibc as the official CLIProxyAPI image:
 

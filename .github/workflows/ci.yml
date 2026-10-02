@@ -156,14 +156,25 @@ jobs:
           pattern: assets-*
           merge-multiple: true
           path: dist
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26"
       - name: Check assets and write checksums
         env:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           cd dist
           for target in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64 windows_amd64; do
-            test -f "claude-keep-rolling_${VERSION}_${target}.zip"
+            zip="claude-keep-rolling_${VERSION}_${target}.zip"
+            test -f "$zip"
+            # Store reviewers match each library to the release tag by its stamped commit.
+            mkdir -p "check/$target"
+            unzip -q -o "$zip" -d "check/$target"
+            info=$(go version -m "check/$target"/claude-keep-rolling.*)
+            grep -qx $'\tbuild\tvcs.revision='"$GITHUB_SHA" <<<"$info" || { echo "$zip is not stamped with $GITHUB_SHA" >&2; echo "$info" >&2; exit 1; }
+            grep -qx $'\tbuild\tvcs.modified=false' <<<"$info" || { echo "$zip was built from a modified tree" >&2; echo "$info" >&2; exit 1; }
           done
+          rm -rf check
           test "$(ls *.zip | wc -l)" -eq 5
           sha256sum -- *.zip >checksums.txt
           cat checksums.txt
