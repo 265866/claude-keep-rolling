@@ -54,8 +54,7 @@ jobs:
       - name: Tidy
         run: |
           go mod tidy
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git diff --exit-code go.mod go.sum
+          git -c safe.directory="$GITHUB_WORKSPACE" diff --exit-code go.mod go.sum
       - run: go vet ./...
       - run: golangci-lint run ./...
       - run: go test -race -cover ./...
@@ -159,6 +158,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
+          cache: false
       - name: Check assets and write checksums
         env:
           VERSION: ${{ needs.version.outputs.version }}
