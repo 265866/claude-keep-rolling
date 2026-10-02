@@ -87,6 +87,11 @@ func TestNextPing(t *testing.T) {
 		{"failure", Outcome{At: at, OK: false, ResetAt: reset}, at.Add(15 * time.Minute)},
 		{"failure with short cooldown", Outcome{At: at, OK: false, CooldownUntil: at.Add(5 * time.Minute)}, at.Add(15 * time.Minute)},
 		{"failure with window cooldown", Outcome{At: at, OK: false, CooldownUntil: reset}, reset.Add(time.Minute)},
+		{"failed manual ping keeps an earlier schedule", Outcome{At: at, OK: false, Manual: true, Scheduled: at.Add(5 * time.Minute)}, at.Add(5 * time.Minute)},
+		{"failed manual ping retries before a later schedule", Outcome{At: at, OK: false, Manual: true, Scheduled: reset}, at.Add(15 * time.Minute)},
+		{"failed manual ping without a schedule", Outcome{At: at, OK: false, Manual: true}, at.Add(15 * time.Minute)},
+		{"failed scheduled ping ignores the old schedule", Outcome{At: at, OK: false, Scheduled: at.Add(5 * time.Minute)}, at.Add(15 * time.Minute)},
+		{"successful manual ping follows the new window", Outcome{At: at, OK: true, ResetAt: reset, Manual: true, Scheduled: at.Add(5 * time.Minute)}, reset.Add(time.Minute)},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -21,7 +21,7 @@ const (
 	tickInterval = 30 * time.Second
 	// shutdownWait bounds how long shutdown waits for in-flight pings.
 	shutdownWait = time.Minute
-	// pingMaxTokens keeps the reply tiny; it is not user-configurable.
+	// pingMaxTokens keeps the reply tiny. A ping only needs to reach Anthropic to start the window.
 	pingMaxTokens = 1
 )
 
@@ -238,21 +238,19 @@ func (r *roller) stateLocked(accountID string) *accountState {
 }
 
 // ping sends one message through the exact account and records when to ping it next.
-// The caller must have claimed the account. A failed manual ping never delays a scheduled one.
+// The caller must have claimed the account.
 func (r *roller) ping(account pluginapi.HostAuthFileEntry, settings rolling.Settings, manual bool) {
 	at := time.Now()
 	resetAt, status, err := sendPing(account.ID, settings)
-	outcome := rolling.Outcome{At: at, OK: err == nil, ResetAt: resetAt}
+	outcome := rolling.Outcome{At: at, OK: err == nil, ResetAt: resetAt, Manual: manual}
 	if err != nil {
 		outcome.CooldownUntil = cooldownUntil(account.ID)
 	}
-	next := rolling.NextPing(outcome)
 
 	r.mu.Lock()
 	state := r.stateLocked(account.ID)
-	if err != nil && manual && !state.NextPingAt.IsZero() && state.NextPingAt.Before(next) {
-		next = state.NextPingAt
-	}
+	outcome.Scheduled = state.NextPingAt
+	next := rolling.NextPing(outcome)
 	state.Pinging = false
 	state.LastPingAt = at
 	state.LastOK = err == nil
@@ -278,7 +276,7 @@ func (r *roller) ping(account pluginapi.HostAuthFileEntry, settings rolling.Sett
 	hostLog("info", "Claude keep-rolling ping sent", fields)
 }
 
-// cooldownUntil returns the retry time CPA recorded for the account after a failure,
+// cooldownUntil returns the retry time the host recorded for the account after a failure,
 // which for a rate limit is the window reset parsed from the rejected response.
 func cooldownUntil(accountID string) time.Time {
 	accounts, err := listClaudeAccounts()

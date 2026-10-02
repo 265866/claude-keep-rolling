@@ -72,16 +72,15 @@ input[type=text],input[type=password],select{font:inherit;padding:7px 9px;border
 (function(){
 "use strict";
 var PLUGIN="claude-keep-rolling";
-var DEFAULTS={model:"claude-haiku-4-5-20251001",prompt:"hi",select_all:true,accounts:[]};
 var KEY_STORE="claude-keep-rolling.key";
 var key="";
 var state=null;
-var settings=Object.assign({},DEFAULTS);
+var settings=null;
 var models=[];
 // A refresh applies the stored config only if no save started or finished while it ran.
 var saving=0;
 var saves=0;
-// CPA may sit behind a reverse-proxy prefix; API paths share this page's prefix.
+// CLIProxyAPI may sit behind a reverse-proxy prefix; API paths share this page's prefix.
 var BASE=location.pathname.replace(/\/v0\/resource\/plugins\/.*$/,"");
 
 function $(id){return document.getElementById(id);}
@@ -151,10 +150,11 @@ function load(){
   ]).then(function(results){
     state=results[0];
     var config=results[1]||{};
+    var defaults=state.defaults;
     if(!saving&&started===saves)settings={
-      model:(config.model||"").trim()||DEFAULTS.model,
-      prompt:(config.prompt||"").trim()?config.prompt:DEFAULTS.prompt,
-      select_all:typeof config.select_all==="boolean"?config.select_all:DEFAULTS.select_all,
+      model:(config.model||"").trim()||defaults.model,
+      prompt:(config.prompt||"").trim()?config.prompt:defaults.prompt,
+      select_all:typeof config.select_all==="boolean"?config.select_all:defaults.select_all,
       accounts:Array.isArray(config.accounts)?config.accounts:[]
     };
     $("key-section").hidden=true;
@@ -268,7 +268,7 @@ function loadModels(){
 var FAMILIES=["fable","mythos","opus","sonnet","haiku"];
 
 // Short name from the model ID, e.g. claude-haiku-4-5-20251001 -> Claude Haiku 4.5.
-// CPA's display names are inconsistent and missing for some models.
+// CLIProxyAPI's display names are inconsistent and missing for some models.
 function parseModel(id){
   var parts=id.replace(/^claude-/,"").replace(/-\d{8}$/,"").split("-");
   var family="",version=[],extra=[];
@@ -318,7 +318,7 @@ $("select-all").addEventListener("click",function(){
   save(settings.select_all?{select_all:false,accounts:[]}:{select_all:true,accounts:[]});
 });
 $("model").addEventListener("change",function(){if(this.value!==settings.model)save({model:this.value});});
-$("prompt").addEventListener("change",function(){var v=this.value.trim()?this.value:DEFAULTS.prompt;this.value=v;if(v!==settings.prompt)save({prompt:v});});
+$("prompt").addEventListener("change",function(){var v=this.value.trim()?this.value:state.defaults.prompt;this.value=v;if(v!==settings.prompt)save({prompt:v});});
 $("key-form").addEventListener("submit",function(ev){
   ev.preventDefault();
   key=$("key-input").value.trim();

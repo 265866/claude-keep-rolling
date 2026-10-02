@@ -1,4 +1,6 @@
-// Entry points between the CLIProxyAPI host and this plugin's Go runtime.
+// Entry points between the CLIProxyAPI host and this plugin's Go runtime. On most
+// platforms they only forward calls. On darwin/amd64 they also keep the two Go
+// runtimes in one process from mistaking each other's state for their own.
 #include "abi.h"
 #include "_cgo_export.h"
 
