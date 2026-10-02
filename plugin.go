@@ -117,7 +117,7 @@ func pluginRegistration() registration {
 			GitHubRepository: repository,
 			ConfigFields: []pluginapi.ConfigField{
 				{Name: "model", Type: pluginapi.ConfigFieldTypeString, Description: "Model used for each ping. Defaults to " + rolling.DefaultModel + "."},
-				{Name: "prompt", Type: pluginapi.ConfigFieldTypeString, Description: "Message sent with each ping. Defaults to hi."},
+				{Name: "prompt", Type: pluginapi.ConfigFieldTypeString, Description: "Message sent with each ping. Defaults to " + rolling.DefaultPrompt + "."},
 				{Name: "select_all", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Keep every Claude account rolling, including accounts added later. Defaults to true."},
 				{Name: "accounts", Type: pluginapi.ConfigFieldTypeArray, Description: "Account IDs to keep rolling when select_all is false."},
 			},
@@ -162,6 +162,7 @@ type stateView struct {
 	Version     string           `json:"version"`
 	Now         time.Time        `json:"now"`
 	Settings    rolling.Settings `json:"settings"`
+	Defaults    rolling.Settings `json:"defaults"`
 	ConfigError string           `json:"config_error,omitempty"`
 	Accounts    []accountView    `json:"accounts"`
 	ListError   string           `json:"list_error,omitempty"`
@@ -169,7 +170,8 @@ type stateView struct {
 
 func buildState(now time.Time) stateView {
 	settings, configError := keeper.currentSettings()
-	view := stateView{Version: pluginVersion, Now: now.UTC(), Settings: settings, ConfigError: configError, Accounts: []accountView{}}
+	defaults, _ := rolling.ParseSettings(nil)
+	view := stateView{Version: pluginVersion, Now: now.UTC(), Settings: settings, Defaults: defaults, ConfigError: configError, Accounts: []accountView{}}
 	accounts, err := listClaudeAccounts()
 	if err != nil {
 		view.ListError = err.Error()

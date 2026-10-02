@@ -109,14 +109,22 @@ type Outcome struct {
 	ResetAt time.Time
 	// CooldownUntil is the host's retry time for the account after a failure.
 	CooldownUntil time.Time
+	// Manual marks a ping started from the status page. Scheduled is the next
+	// ping that was already planned when it started.
+	Manual    bool
+	Scheduled time.Time
 }
 
-// NextPing returns when the account should be pinged again.
+// NextPing returns when the account should be pinged again. A failed manual
+// ping never delays the ping that was already scheduled.
 func NextPing(o Outcome) time.Time {
 	if !o.OK {
 		next := o.At.Add(RetryAfterFailure)
 		if cooled := o.CooldownUntil.Add(ResetBuffer); !o.CooldownUntil.IsZero() && cooled.After(next) {
 			next = cooled
+		}
+		if o.Manual && !o.Scheduled.IsZero() && o.Scheduled.Before(next) {
+			next = o.Scheduled
 		}
 		return next
 	}

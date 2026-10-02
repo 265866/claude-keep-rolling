@@ -62,7 +62,6 @@ import (
 
 //export hostCall
 func hostCall(ctx unsafe.Pointer, method *C.char, request *C.uint8_t, requestLen C.size_t, out *C.cliproxy_buffer) C.int {
-	_, _, _ = ctx, request, requestLen
 	resp := `{"ok":true,"result":{}}`
 	if C.GoString(method) == "host.auth.list" {
 		resp = `{"ok":true,"result":{"files":[]}}`
@@ -74,7 +73,6 @@ func hostCall(ctx unsafe.Pointer, method *C.char, request *C.uint8_t, requestLen
 
 //export hostFree
 func hostFree(ptr unsafe.Pointer, size C.size_t) {
-	_ = size
 	C.free(ptr)
 }
 
