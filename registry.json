@@ -9,7 +9,7 @@
       "repository": "https://github.com/265866/claude-keep-rolling",
       "homepage": "https://github.com/265866/claude-keep-rolling",
       "license": "MIT",
-      "tags": ["Claude", "Usage", "Scheduler"]
+      "tags": ["Management", "Scheduler", "Claude"]
     }
   ]
 }

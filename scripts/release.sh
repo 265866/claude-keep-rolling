@@ -3,7 +3,7 @@
 #
 # Linux and Windows targets build on Debian bookworm, so the Linux libraries link
 # against the same glibc as the official CLIProxyAPI image:
-#   podman run --rm -v "$PWD":/src -w /src -e VERSION=0.1.0 docker.io/library/golang:1.26-bookworm ./scripts/release.sh
+#   docker run --rm -v "$PWD":/src -w /src -e VERSION=0.1.0 golang:1.26-bookworm ./scripts/release.sh
 # Darwin targets build on macOS:
 #   VERSION=0.1.0 TARGETS="darwin/arm64 darwin/amd64" ./scripts/release.sh
 #
