@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/265866/claude-keep-rolling/internal/rolling"
 	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
@@ -392,6 +393,9 @@ func truncate(value string, limit int) string {
 	value = strings.TrimSpace(value)
 	if len(value) <= limit {
 		return value
+	}
+	for limit > 0 && !utf8.RuneStart(value[limit]) {
+		limit--
 	}
 	return value[:limit] + "..."
 }
