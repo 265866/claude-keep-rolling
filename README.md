@@ -40,7 +40,7 @@ plugins:
       enabled: true
 ```
 
-On Intel Macs, Go plugins share one thread-local slot with CLIProxyAPI's own Go runtime. The plugin swaps that slot on every call between the two, so it loads and runs normally there. One limit remains: while the plugin is loaded, a memory fault inside CLIProxyAPI that it would normally recover from, such as a nil pointer bug, can stop the whole process instead.
+On Intel Macs, Go plugins share one thread-local slot with CLIProxyAPI's own Go runtime, and a Go plugin's runtime also takes over some of CLIProxyAPI's signal handlers when it loads. This plugin swaps that slot on every call between the two and hands those signals back to CLIProxyAPI, so it runs normally there and CLIProxyAPI still recovers from its own faults. Two trade-offs remain on Intel Macs: a memory fault in this plugin's own code stops CLIProxyAPI, and another Go plugin loaded after this one takes those signal handlers back.
 
 ## Use
 

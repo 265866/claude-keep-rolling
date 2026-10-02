@@ -119,6 +119,20 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           CPA_ASSET: ${{ matrix.cpa-asset }}
         run: ./scripts/smoke-test.sh "dist/claude-keep-rolling_${VERSION}_${{ matrix.target }}.zip"
+      - uses: actions/setup-go@v7
+        if: runner.os != 'Windows'
+        with:
+          go-version: "1.26"
+      - name: Recover host faults with the plugin loaded
+        if: runner.os != 'Windows'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir -p faulthost-plugin
+          unzip -q -o "dist/claude-keep-rolling_${VERSION}_${{ matrix.target }}.zip" -d faulthost-plugin
+          go build -o faulthost-bin ./test/faulthost
+          # Longer than the plugin's 20 s startup delay, so its own loop calls the host too.
+          ./faulthost-bin -for 30s faulthost-plugin/claude-keep-rolling.*
 
   assemble:
     needs: [version, smoke]
