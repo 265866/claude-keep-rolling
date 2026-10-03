@@ -23,33 +23,14 @@ A Claude usage window starts with the first message and resets five hours later.
 
 ## Install
 
-Requires CLIProxyAPI v8 with plugins enabled. Releases cover macOS (Apple Silicon and Intel), Linux (x64 and Arm) and Windows (x64).
-
-### From the Plugin Store
-
-Add this repository's registry to the store sources in `config.yaml`:
+Requires CLIProxyAPI v8 with plugins enabled:
 
 ```yaml
 plugins:
   enabled: true
-  store-sources:
-    - "https://raw.githubusercontent.com/265866/claude-keep-rolling/main/registry.json"
 ```
 
-Then open **Plugin Store** in the Management Center and install **Claude Keep Rolling**.
-
-### Manually
-
-Download the zip for your platform from the [latest release](https://github.com/265866/claude-keep-rolling/releases/latest) and check it against `checksums.txt`. Put the library from the zip (`claude-keep-rolling.dylib`, `.so` or `.dll`) in your plugins directory, then enable it:
-
-```yaml
-plugins:
-  enabled: true
-  dir: "plugins"
-  configs:
-    claude-keep-rolling:
-      enabled: true
-```
+Open **Plugin Store** in the Management Center and install **Claude Keep Rolling**. It runs on macOS (Apple Silicon and Intel), Linux (x64 and Arm) and Windows (x64).
 
 ## Use
 
