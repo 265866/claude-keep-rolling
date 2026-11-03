@@ -155,7 +155,11 @@ type accountView struct {
 	LastStatus int        `json:"last_status,omitempty"`
 	LastError  string     `json:"last_error,omitempty"`
 	ResetAt    *time.Time `json:"reset_at,omitempty"`
-	NextPingAt *time.Time `json:"next_ping_at,omitempty"`
+	// Mode and the weekly fields come from the last successful ping.
+	Mode              rolling.Mode `json:"mode,omitempty"`
+	WeeklyResetAt     *time.Time   `json:"weekly_reset_at,omitempty"`
+	WeeklyUtilization *float64     `json:"weekly_utilization,omitempty"`
+	NextPingAt        *time.Time   `json:"next_ping_at,omitempty"`
 }
 
 type stateView struct {
@@ -190,7 +194,10 @@ func buildState(now time.Time) stateView {
 			item.LastOK = state.LastOK
 			item.LastStatus = state.LastStatus
 			item.LastError = state.LastError
-			item.ResetAt = timeOrNil(state.ResetAt)
+			item.ResetAt = timeOrNil(state.Limits.FiveHourReset)
+			item.Mode = state.Mode
+			item.WeeklyResetAt = timeOrNil(state.Limits.WeeklyReset)
+			item.WeeklyUtilization = state.Limits.WeeklyUtilization
 			item.NextPingAt = timeOrNil(state.NextPingAt)
 		}
 		view.Accounts = append(view.Accounts, item)
