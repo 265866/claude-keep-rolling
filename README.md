@@ -9,13 +9,16 @@ A Claude usage window starts with the first message and resets five hours later.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/status-dark.png">
-  <img alt="The Claude Keep Rolling page, listing Claude accounts with their last ping, window reset and next ping" src="docs/status-light.png">
+  <img alt="The Claude Keep Rolling page, listing Claude accounts with their last ping, window reset, weekly usage and mode" src="docs/status-light.png">
 </picture>
 
 ## How it works
 
 - Each ping goes through CLIProxyAPI's own Claude executor, pinned to one account.
 - Claude's reply reports when the window resets. The next ping is scheduled one minute after that.
+- If the reply shows only a weekly limit and no five-hour limit, as on verified Ultra accounts, scheduled pings stop. The account is pinged once, one minute after its weekly limit resets, in case the five-hour limit returns. If the reply gives no weekly reset time, it is pinged again after 24 hours.
+- If the reply shows the weekly limit is used up, the account is not pinged until one minute after the weekly reset, or for 24 hours if the reply gives no weekly reset time. Pings cannot move the weekly reset.
+- Only the weekly limit for all models counts. Model-specific weekly limits, such as Fable's, are ignored.
 - A failed ping is retried after 15 minutes, or just after CLIProxyAPI's cooldown for the account ends if that is later.
 - A ping is one short message with no tools, and the reply is capped at 1 token, so it uses almost none of the window.
 - Disabled accounts and Claude API keys are skipped.
@@ -36,9 +39,9 @@ Open **Plugin Store** in the Management Center and install **Claude Keep Rolling
 
 Open **Claude Keep Rolling** in the Management Center sidebar.
 
-- **Accounts**: check the accounts to keep rolling. **Select all** includes accounts you add later. Unchecking any account switches to only the accounts you have checked.
+- **Accounts**: each account shows its weekly usage and its mode: **Rolling**, **No 5-hour limit** with the next re-check, or **Weekly limit reached** with the time pings resume. Check the accounts to keep rolling. **Select all** includes accounts you add later. Unchecking any account switches to only the accounts you have checked.
 - **Settings**: the model and prompt for each ping. The model list shows the Claude models CLIProxyAPI offers. The default is Claude Haiku 4.5.
-- **Ping now** sends a ping immediately. If it fails, the next scheduled ping still runs on time.
+- **Ping now** sends a ping immediately. If it fails, the next scheduled ping still runs on time, and an account waiting for its weekly reset keeps waiting.
 
 The page reuses the management key the Management Center saved if you logged in with **Remember password**. Otherwise it asks for the key and keeps it for the current tab only.
 

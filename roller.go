@@ -33,7 +33,9 @@ type accountState struct {
 	LastOK     bool
 	LastStatus int
 	LastError  string
-	ResetAt    time.Time
+	// Limits and Mode come from the last successful ping.
+	Limits     rolling.Limits
+	Mode       rolling.Mode
 	NextPingAt time.Time
 	Pinging    bool
 }
@@ -242,8 +244,8 @@ func (r *roller) stateLocked(accountID string) *accountState {
 // The caller must have claimed the account.
 func (r *roller) ping(account pluginapi.HostAuthFileEntry, settings rolling.Settings, manual bool) {
 	at := time.Now()
-	resetAt, status, err := sendPing(account.ID, settings)
-	outcome := rolling.Outcome{At: at, OK: err == nil, ResetAt: resetAt, Manual: manual}
+	limits, status, err := sendPing(account.ID, settings)
+	outcome := rolling.Outcome{At: at, OK: err == nil, Limits: limits, Manual: manual}
 	if err != nil {
 		outcome.CooldownUntil = cooldownUntil(account.ID)
 	}
@@ -251,6 +253,7 @@ func (r *roller) ping(account pluginapi.HostAuthFileEntry, settings rolling.Sett
 	r.mu.Lock()
 	state := r.stateLocked(account.ID)
 	outcome.Scheduled = state.NextPingAt
+	outcome.Mode = state.Mode
 	next := rolling.NextPing(outcome)
 	state.Pinging = false
 	state.LastPingAt = at
@@ -260,7 +263,8 @@ func (r *roller) ping(account pluginapi.HostAuthFileEntry, settings rolling.Sett
 	if err != nil {
 		state.LastError = err.Error()
 	} else {
-		state.ResetAt = resetAt
+		state.Limits = limits
+		state.Mode = limits.Mode()
 	}
 	state.NextPingAt = next
 	r.mu.Unlock()
@@ -271,8 +275,12 @@ func (r *roller) ping(account pluginapi.HostAuthFileEntry, settings rolling.Sett
 		hostLog("warn", "Claude keep-rolling ping failed", fields)
 		return
 	}
-	if !resetAt.IsZero() {
-		fields["window_reset"] = resetAt.Format(time.RFC3339)
+	fields["mode"] = string(limits.Mode())
+	if !limits.FiveHourReset.IsZero() {
+		fields["window_reset"] = limits.FiveHourReset.Format(time.RFC3339)
+	}
+	if !limits.WeeklyReset.IsZero() {
+		fields["weekly_reset"] = limits.WeeklyReset.Format(time.RFC3339)
 	}
 	hostLog("info", "Claude keep-rolling ping sent", fields)
 }
@@ -303,17 +311,18 @@ type claudeRequest struct {
 	Messages  []claudeMessage `json:"messages"`
 }
 
-// sendPing returns the window reset time and HTTP status. No tools are declared,
+// sendPing returns the rate limits from a successful reply and the HTTP status.
+// The host returns a failed reply as an error without its headers. No tools are declared,
 // so the model can only answer with text. No host callback ID is passed, so a
 // manual ping is not cancelled when its browser request goes away.
-func sendPing(accountID string, settings rolling.Settings) (time.Time, int, error) {
+func sendPing(accountID string, settings rolling.Settings) (rolling.Limits, int, error) {
 	body, err := json.Marshal(claudeRequest{
 		Model:     settings.Model,
 		MaxTokens: pingMaxTokens,
 		Messages:  []claudeMessage{{Role: "user", Content: settings.Prompt}},
 	})
 	if err != nil {
-		return time.Time{}, 0, err
+		return rolling.Limits{}, 0, err
 	}
 	raw, err := callHost(pluginabi.MethodHostModelExecute, pluginapi.HostModelExecutionRequest{
 		EntryProtocol:  "claude",
@@ -326,19 +335,18 @@ func sendPing(accountID string, settings rolling.Settings) (time.Time, int, erro
 	if err != nil {
 		var hostErr *hostError
 		if errors.As(err, &hostErr) {
-			return time.Time{}, hostErr.Status, err
+			return rolling.Limits{}, hostErr.Status, err
 		}
-		return time.Time{}, 0, err
+		return rolling.Limits{}, 0, err
 	}
 	var resp pluginapi.HostModelExecutionResponse
 	if err := json.Unmarshal(raw, &resp); err != nil {
-		return time.Time{}, 0, fmt.Errorf("decode model response: %w", err)
+		return rolling.Limits{}, 0, fmt.Errorf("decode model response: %w", err)
 	}
 	if resp.StatusCode >= 400 {
-		return time.Time{}, resp.StatusCode, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(resp.Body), 300))
+		return rolling.Limits{}, resp.StatusCode, fmt.Errorf("HTTP %d: %s", resp.StatusCode, truncate(string(resp.Body), 300))
 	}
-	resetAt, _ := rolling.ResetTime(resp.Headers)
-	return resetAt, resp.StatusCode, nil
+	return rolling.ParseLimits(resp.Headers), resp.StatusCode, nil
 }
 
 type authListResponse struct {
